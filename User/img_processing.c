@@ -9,6 +9,11 @@ int lastMiddlePoint=col_num/2;
 int scanRowBegin=20;//一共50行
 int scanRowEnd=25;
 float ratio=2.0;
+float angle_kd=0.3;
+float angle_error=0;
+float angle_lasterror=0;
+int middleX=0;
+
 
 extern float speedValue;
 extern uint16_t lastCounterValue;
@@ -18,17 +23,7 @@ extern int8_t QDdirection;
 extern uint32_t millis;
 
 extern Queue fifoData;
-
-extern int deltMiddleWidth;
-extern bool doWeRun;
-extern float ra;
 extern int deltBias;
-
-int lastMiddleX=0;
-
-int whiteCount=1;
-int blackCount=1;
-int servoError=0;
 /*
 * @name		searchline_OV7620
 * @description	To get the racing track from the imgadd.
@@ -71,13 +66,10 @@ int getImageFeature(void)
   int thresholdBlack=99;
   bool flagL,flagR;
   int firstMiddle;
-  
-  int deltWidth[5]={1000,1000,1000,1000,1000};
- 
  
   temp=lastMiddlePoint;//this is the middle of cols
   firstMiddle=lastMiddlePoint;
-  
+
   
   for(i=scanRowBegin;i<scanRowEnd;i++)
   {
@@ -117,7 +109,6 @@ int getImageFeature(void)
     if(!flagR){lowPoints[row_count][1]=col_num-1;lowPointsGrayscale[row_count][1]=-1;}
     
     lowMiddlePoint[row_count]=(lowPoints[row_count][0]+lowPoints[row_count][1])/2;
-    deltWidth[row_count]=lowPoints[row_count][1]-lowPoints[row_count][0];
     row_count++;
   }
   //printf("%d %d : %d\n %d %d : %d\n %d %d : %d\n %d %d : %d\n %d %d : %d\n",lowPoints[0][0],lowPoints[0][1],lowMiddlePoint[0],lowPoints[1][0],lowPoints[1][1],lowMiddlePoint[1],lowPoints[2][0],lowPoints[2][1],lowMiddlePoint[2],lowPoints[3][0],lowPoints[3][1],lowMiddlePoint[3],lowPoints[4][0],lowPoints[4][1],lowMiddlePoint[4]);
@@ -136,35 +127,6 @@ int getImageFeature(void)
  // printf("Middle:%d\n",firstMiddle);
   
   
-  deltMiddleWidth=deltWidth[0]+deltWidth[1]+deltWidth[2]+deltWidth[3]+deltWidth[4];
-  deltMiddleWidth=deltMiddleWidth/5;
-  if(deltMiddleWidth<15)//这里是黑线间隔的阈值  需要实际测量的
-  {
-    //do more things to detect if we run into lines...
-    //doWeRun=false;
-    i=(scanRowBegin+2)*col_num;
-    blackCount=1;
-    whiteCount=1;
-    for(int j=0;j<col_num;j++)
-    {
-       if(imgadd[i+j]<thresholdBlack)
-         blackCount++;
-       else
-         whiteCount++;
-    }
-    ra=(float)blackCount/(float)whiteCount;
-    if(ra<1.0)
-    {
-        doWeRun=false;
-    }
-  }
-  else
-  {
-    doWeRun=true;//这里有可能要注释掉  看最后的刹车速度
-  }
-  
-  
-  
   
   return firstMiddle;
 }
@@ -172,7 +134,7 @@ int getImageFeature(void)
 
 void dispimage(void){
 	uint16_t i=0, j=0;
-        int middleX=0;
+        middleX=0;
         char showInfo[4];
         float output;
      
@@ -208,22 +170,17 @@ void dispimage(void){
         InFifo(&fifoData,middleX);
         
         middleX=middleX-col_num/2;
+        //940 760 852 
         
-        
-        #define MAX_PULSE               940
-        #define MIN_PULSE               760
+        #define MAX_PULSE               960
+        #define MIN_PULSE               740
         #define MIDDLE_PULSE            852
         
-        float servo_kd=0;
+        if(abs(deltBias)<8)ratio=2.5;//2.5
+        else if(abs(deltBias)<13) ratio=5.8;//5.8  7.8
+        else ratio=5.8;//7.8
         
-        //ratio=5.8;
-        if(abs(deltBias)<8)ratio=1.8;
-        else ratio=7.8;
-        servoError=middleX;
         output=ratio*(float)(middleX)+MIDDLE_PULSE;
-        //output=ratio*(float)(middleX)+MIDDLE_PULSE+;
-        lastMiddleX=middleX;
-        
         if(output<MIN_PULSE)output=MIN_PULSE;
         if(output>MAX_PULSE)output=MAX_PULSE;
         

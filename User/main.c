@@ -12,7 +12,6 @@ int getImageFeature(void);
 void speedPidInit(float target);
 void speedPid(float target);
 
-int deltMiddleWidth=0;
 
 uint16_t lastCounterValue=0;
 uint16_t deltValue=0;
@@ -20,10 +19,11 @@ int16_t QDvalue=0;
 int8_t QDdirection;
 float speedValue=0;
 uint32_t millis=0;
+extern int middleX;
 
 //speed range 0-400
 float speedControlErrSum=0;
-float speedControlKp=30;
+float speedControlKp=40;//30
 float speedControlKi=1;
 
 float speedControlCurrentSpeed;
@@ -32,13 +32,16 @@ float speedControlOutput;
 float speedControlError;
 float speedControlLasttime=0;
 
+
+
 //fifo data
 Queue fifoData;
-
-bool doWeRun=true;
-float ra=0;
+uint32_t accCount=200;
 int deltBias=0;
-extern int servoError;
+
+int accSpeedLow[11]={5,10,15,20,20,20,25,30,30,40,45};
+int accSpeedHigh[11]={5,10,15,20,25,30,35,40,45,50,55};
+
 static void PIT0_Int(void)
 {
   millis++;
@@ -63,8 +66,8 @@ int main()
   EnableInterrupts;
   //row=50 col=152
   //显示屏是128x64
-  
-  InitFifo(&fifoData,20);//初始化数据队列，用来存放连续获得的传感数据
+ // GPIO_QuickInit(HW_GPIOB, 22, kGPIO_Mode_IPU);
+  InitFifo(&fifoData,10);//初始化数据队列，用来存放连续获得的传感数据  20
  
   
   printf("Hello world \r\n");
@@ -73,6 +76,7 @@ int main()
   SYSTICK_DelayInit();
   
   printf("Enter to begin\n");
+ 
   while(Serial_available()==0);//等待串口命令开始
   
   FTM_PWM_QuickInit(FTM0_CH7_PD07, kPWM_EdgeAligned, 2000, 1000);//设置电机pwm2000hzpwm 初始占空比10%
@@ -82,11 +86,14 @@ int main()
   speedPidInit(0);//初始化速度pid
   char input;
   int num=0;
+  accCount=0;
   while(1){    //One period is about 9~10ms
     uint32_t record1=millis;
      dispimage();//OLED显示 
+     
      if(Serial_available())//接受串口传回来的速度控制指令
     {
+      int lastNum=num;
       num=0;
       while(Serial_available())
       {
@@ -94,6 +101,8 @@ int main()
         num+=(Serial_read()-'0');
         delay(5);
       }
+      if(num!=0&&lastNum==0)
+        accCount=0;
     }
         
      uint32_t record2=millis-record1;//计算程序运行花费时间
@@ -102,16 +111,26 @@ int main()
      
      if(num!=0)//如果num为0  说明串口传过来的数据是要停止前进
      {
-       if(abs(deltBias)<8)num=70;//此时偏差值较小 所以说明是直道 所以可以加大速度  65,40
-       else       num=50;//是弯道  所以减小速度
+       if(abs(deltBias)<12)num=100;//此时偏差值较小 所以说明是直道 所以可以加大速度   75  54  73
+       else       num=45;//是弯道  所以减小速度  43
      }
      
-     if(!doWeRun)
-       num=0;
-     
-     speedPid(num);//速度pid调控
-     printf("%.2f %.2f  %.2f %d %d %d\r\n",speedControlTargetSpeed,speedControlCurrentSpeed,speedControlOutput,deltMiddleWidth,doWeRun,servoError);
-     delay(2);
+     if(accCount>110)//已经不再是加速度段
+      speedPid(num);//速度pid调控
+     else//起步加速  阶梯加速
+     {
+       if((accCount/10)<11)
+       {
+          if(num<50)
+            speedPid(accSpeedLow[accCount/10]);
+          else
+            speedPid(accSpeedHigh[accCount/10]);
+       }
+     }
+     //printf("%.2f %.2f  %.2f %d %d\r\n",speedControlTargetSpeed,speedControlCurrentSpeed,speedControlOutput,bias,millis-record1);
+     printf("%.2f,%.2f,%d\r\n",speedControlTargetSpeed,speedControlCurrentSpeed,middleX); 
+     //delay(2);
+     accCount++;
   } 
 }
 
@@ -127,7 +146,7 @@ void send()//发送图像到上位机
 }
 
 void speedPidInit(float target)
-{
+{ 
   if(target<0)target=0;
   if(target>400)target=400;
   speedControlTargetSpeed=target;
