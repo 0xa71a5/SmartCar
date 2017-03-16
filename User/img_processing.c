@@ -8,11 +8,15 @@ int frameCount=0;
 int lastMiddlePoint=col_num/2;
 int scanRowBegin=20;//Ò»¹²50ÐÐ
 int scanRowEnd=25;
+
+int middleX=0;
 float ratio=2.0;
-float angle_kd=0.3;
+float angle_kd=0.5;
+float angle_kp=2.0;
 float angle_error=0;
 float angle_lasterror=0;
-int middleX=0;
+float angle_kp_high=5.8;
+float angle_kp_low=2.5;
 
 
 extern float speedValue;
@@ -170,17 +174,19 @@ void dispimage(void){
         InFifo(&fifoData,middleX);
         
         middleX=middleX-col_num/2;
-        //940 760 852 
         
-        #define MAX_PULSE               960
-        #define MIN_PULSE               740
+        
+        #define MAX_PULSE               940
+        #define MIN_PULSE               760
         #define MIDDLE_PULSE            852
         
-        if(abs(deltBias)<8)ratio=2.5;//2.5
-        else if(abs(deltBias)<13) ratio=5.8;//5.8  7.8
-        else ratio=5.8;//7.8
+        if(abs(deltBias)<8)angle_kp=angle_kp_low;
+        else if(abs(deltBias)<13) angle_kp=angle_kp_high;
+        else angle_kp=angle_kp_high;
         
-        output=ratio*(float)(middleX)+MIDDLE_PULSE;
+        angle_error=middleX;
+        output=MIDDLE_PULSE+angle_kp*angle_error+angle_kd*(angle_error-angle_lasterror);
+
         if(output<MIN_PULSE)output=MIN_PULSE;
         if(output>MAX_PULSE)output=MAX_PULSE;
         
