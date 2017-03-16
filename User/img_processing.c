@@ -28,6 +28,11 @@ extern uint32_t millis;
 
 extern Queue fifoData;
 extern int deltBias;
+
+int deltMiddleWidth;
+int whiteCount=1;
+int blackCount=1;
+bool doWeRun=true;
 /*
 * @name		searchline_OV7620
 * @description	To get the racing track from the imgadd.
@@ -71,6 +76,8 @@ int getImageFeature(void)
   bool flagL,flagR;
   int firstMiddle;
  
+  int deltWidth[5]={1000,1000,1000,1000,1000};
+  
   temp=lastMiddlePoint;//this is the middle of cols
   firstMiddle=lastMiddlePoint;
 
@@ -113,6 +120,7 @@ int getImageFeature(void)
     if(!flagR){lowPoints[row_count][1]=col_num-1;lowPointsGrayscale[row_count][1]=-1;}
     
     lowMiddlePoint[row_count]=(lowPoints[row_count][0]+lowPoints[row_count][1])/2;
+    deltWidth[row_count]=lowPoints[row_count][1]-lowPoints[row_count][0];
     row_count++;
   }
   //printf("%d %d : %d\n %d %d : %d\n %d %d : %d\n %d %d : %d\n %d %d : %d\n",lowPoints[0][0],lowPoints[0][1],lowMiddlePoint[0],lowPoints[1][0],lowPoints[1][1],lowMiddlePoint[1],lowPoints[2][0],lowPoints[2][1],lowMiddlePoint[2],lowPoints[3][0],lowPoints[3][1],lowMiddlePoint[3],lowPoints[4][0],lowPoints[4][1],lowMiddlePoint[4]);
@@ -130,7 +138,44 @@ int getImageFeature(void)
     lastMiddlePoint=firstMiddle;
  // printf("Middle:%d\n",firstMiddle);
   
-  
+  deltMiddleWidth=deltWidth[0]+deltWidth[1]+deltWidth[2]+deltWidth[3]+deltWidth[4];
+  deltMiddleWidth=deltMiddleWidth/5;
+  if(deltMiddleWidth<15)//这里是黑线间隔的阈值  需要实际测量的
+  {
+    i=(scanRowBegin+2)*col_num;
+    blackCount=1;
+    whiteCount=1;
+    #define blackBlock 0
+    #define whiteBlock 1
+    uint8_t lastBlock=blackBlock;
+    for(int j=0;j<col_num;j++)
+    {
+       if(imgadd[i+j]<thresholdBlack)//black
+       {
+         if(lastBlock==whiteBlock)
+         {
+           blackCount++;
+           lastBlock=blackBlock;
+         }
+       }
+       else//white
+       {
+         if(lastBlock==blackBlock)
+         {
+           whiteCount++;
+           lastBlock=whiteBlock;
+         }
+       }
+       if(whiteCount>=9&&blackCount>=9)
+        doWeRun=false;
+       else
+         doWeRun=true;
+    }
+  }
+  else
+  {
+    doWeRun=true;//这里有可能要注释掉  看最后的刹车速度
+  }
   
   return firstMiddle;
 }

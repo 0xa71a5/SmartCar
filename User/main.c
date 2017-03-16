@@ -37,6 +37,12 @@ extern float angle_kd;
 extern float angle_kp;
 extern float angle_kp_high;
 extern float angle_kp_low;
+
+extern int deltMiddleWidth;
+extern int whiteCount;
+extern int blackCount;
+extern bool doWeRun;
+
 //fifo data
 Queue fifoData;
 uint32_t accCount=200;
@@ -114,7 +120,7 @@ int main()
   //row=50 col=152
   //显示屏是128x64
  // GPIO_QuickInit(HW_GPIOB, 22, kGPIO_Mode_IPU);
-  InitFifo(&fifoData,20);//初始化数据队列，用来存放连续获得的传感数据
+  InitFifo(&fifoData,10);//初始化数据队列，用来存放连续获得的传感数据
  
   
   printf("Hello world \r\n");
@@ -159,6 +165,7 @@ int main()
         }
         num+=(tmpData-'0');
         delay(5);
+        doWeRun=true;
       }
       if(num!=0&&lastNum==0)
         accCount=0;
@@ -174,16 +181,27 @@ int main()
        else       num=minTargetSpeed;//是弯道  所以减小速度  43
      }
      
-     if(accCount>110)//已经不再是加速度段
-      speedPid(num);//速度pid调控
-     else//起步加速  阶梯加速
+     if(doWeRun)
      {
-       if((accCount/10)<11)
+       if(accCount>110)//已经不再是加速度段
+        speedPid(num);//速度pid调控
+       else//起步加速  阶梯加速
        {
-            speedPid(accSpeedHigh[accCount/10]);//使用阶梯加速
+         if((accCount/10)<11)
+         {
+              speedPid(accSpeedHigh[accCount/10]);//使用阶梯加速
+         }
        }
      }
-     printf("%.2f,%.2f,%d,%d,%d\r\n",speedControlTargetSpeed,speedControlCurrentSpeed,middleX,testValue1,testValue2); 
+     else//检测到终点  停止前进
+     {
+       num=0;
+       speedPid(num);
+     }
+     if(doWeRun)
+     printf("%.2f,%.2f,%d\r\n",speedControlTargetSpeed,speedControlCurrentSpeed,middleX); 
+     else
+     printf("%d,%d\r\n",whiteCount,blackCount);     
      //delay(2);
      accCount++;
   } 
