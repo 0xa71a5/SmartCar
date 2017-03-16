@@ -6,6 +6,7 @@
 #include "systick.h"
 #include "pit.h"
 #include "uart.h"
+
 void send(void);
 int getImageFeature(void);
 #define delay(x) SYSTICK_DelayMs(x)
@@ -20,7 +21,7 @@ int8_t QDdirection;
 float speedValue=0;
 uint32_t millis=0;
 
-
+bool doWeReset=false;
 //speed range 0-400
 float speedControlErrSum=0;
 float speedControlKp=30;
@@ -48,20 +49,33 @@ Queue fifoData;
 uint32_t accCount=200;
 int deltBias=0;
 
-int maxTargetSpeed=60;
+int maxTargetSpeed=70;
 int minTargetSpeed=45;
 
 int accSpeedLow[11]={5,10,15,20,20,20,25,30,30,40,45};
 int accSpeedHigh[11]={5,10,15,20,20,25,30,35,40,45,50};
 
-int testValue1=0;
-int testValue2=0;
 
 static void PIT0_Int(void)
 {
   millis++;
 }
 
+void resetSystem()
+{
+    FTM_PWM_ChangeDuty(HW_FTM2, HW_FTM_CH0,750);//middle the servo
+    FTM_PWM_ChangeDuty(HW_FTM0, HW_FTM_CH7,0);//stop motor
+    doWeReset=true;
+}
+
+void InitAccSpeed()
+{
+   for(int i=0;i<11;i++)
+  {
+    accSpeedHigh[i]=maxTargetSpeed*(i+1)/11;
+    accSpeedLow[i] =minTargetSpeed*(i+1)/11;
+  }
+}
 void parse()
 {
   char recvType;
@@ -86,13 +100,14 @@ void parse()
     }
     switch(recvType)
     {
-    case 'm':maxTargetSpeed=recvValue;printf("maxTargetSpeed set to %d\r\n",recvValue);delay(1500);break;
-    case 'n':minTargetSpeed=recvValue;printf("minTargetSpeed set to %d\r\n",recvValue);delay(1500);break; 
+    case 'm':maxTargetSpeed=recvValue;printf("maxTargetSpeed set to %d\r\n",recvValue);InitAccSpeed();delay(1500);break;
+    case 'n':minTargetSpeed=recvValue;printf("minTargetSpeed set to %d\r\n",recvValue);InitAccSpeed();delay(1500);break; 
     case 'q':speedControlKp=(float)recvValue*0.1;printf("Speed Kp set to %f\r\n",speedControlKp);delay(1500);break; 
     case 'w':speedControlKi=(float)recvValue*0.1;printf("Speed Ki set to %f\r\n",speedControlKi);delay(1500);break; 
     case 'a':angle_kp_high=(float)recvValue*0.1;printf("Servo Kp high set to %f\r\n",angle_kp_high);delay(1500);break; 
     case 'z':angle_kp_low=(float)recvValue*0.1;printf("Servo Kp low set to %f\r\n",angle_kp_low);delay(1500);break; 
-    case 'd':angle_kd=(float)recvValue*0.1;printf("Servo Kd set to %f\r\n",angle_kd);delay(1500);break;     
+    case 'd':angle_kd=(float)recvValue*0.1;printf("Servo Kd set to %f\r\n",angle_kd);delay(1500);break;   
+    case 'r':printf("Reset system\r\n");resetSystem();break;
     }
   }
   else
@@ -102,6 +117,7 @@ void parse()
 }
 int main()
 {
+resetFlag:;
   int anglePulse=500;
   char showInfo[8];
   DisableInterrupts;//初始化之前先关掉所有中断
@@ -121,11 +137,7 @@ int main()
   //显示屏是128x64
  // GPIO_QuickInit(HW_GPIOB, 22, kGPIO_Mode_IPU);
   InitFifo(&fifoData,10);//初始化数据队列，用来存放连续获得的传感数据
- 
-  
   printf("Hello world \r\n");
-
-  
   SYSTICK_DelayInit();
   
   printf("Enter to begin\n");
@@ -170,6 +182,8 @@ int main()
       if(num!=0&&lastNum==0)
         accCount=0;
     }
+    
+    if(doWeReset){doWeReset=false;goto resetFlag;}
         
      uint32_t record2=millis-record1;//计算程序运行花费时间
      uint32_t bias=GetFifoBias(&fifoData);//获取连续时间下的中点数值变化
@@ -198,12 +212,11 @@ int main()
        num=0;
        speedPid(num);
      }
-     if(doWeRun)
-     printf("%.2f,%.2f,%d\r\n",speedControlTargetSpeed,speedControlCurrentSpeed,middleX); 
-     else
-     printf("%d,%d\r\n",whiteCount,blackCount);     
-     //delay(2);
+
+     printf("%.2f,%.2f,75,%d,%d,%d\r\n",speedControlTargetSpeed,speedControlCurrentSpeed,bias,whiteCount,blackCount); 
+
      accCount++;
+     
   } 
 }
 
