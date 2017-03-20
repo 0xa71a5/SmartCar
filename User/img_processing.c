@@ -8,15 +8,12 @@ int frameCount=0;
 int lastMiddlePoint=col_num/2;
 int scanRowBegin=20;//一共50行
 int scanRowEnd=25;
-
-int middleX=0;
 float ratio=2.0;
-float angle_kd=0.5;
+float angle_kd=1.0;
 float angle_kp=2.0;
 float angle_error=0;
 float angle_lasterror=0;
-float angle_kp_high=5.8;
-float angle_kp_low=2.5;
+int middleX=0;
 
 
 extern float speedValue;
@@ -25,7 +22,7 @@ extern uint16_t deltValue;
 extern int16_t QDvalue;
 extern int8_t QDdirection;
 extern uint32_t millis;
-
+extern float outputAngleValue;
 extern Queue fifoData;
 extern int deltBias;
 
@@ -33,20 +30,23 @@ int deltMiddleWidth;
 int whiteCount=1;
 int blackCount=1;
 bool doWeRun=true;
+int seg1=10;
+int seg2=20;
+int seg3=30;
 /*
-* @name		searchline_OV7620
-* @description	To get the racing track from the imgadd.
-* @inputval	None
-* @outputval	None
-* @retval 	0
+* @name     searchline_OV7620
+* @description  To get the racing track from the imgadd.
+* @inputval None
+* @outputval    None
+* @retval   0
 */
 
 /*
-* @name			dispimage
-* @description	Display the image or racing track on OLED screen.
-* @inputval		None
-* @outputval	None
-* @retval 		0
+* @name         dispimage
+* @description  Display the image or racing track on OLED screen.
+* @inputval     None
+* @outputval    None
+* @retval       0
 */
 unsigned char display_col[158]={0,0,1,2,3,4,4,5,6,7,8,8,9,10,11,12,12,13,14,
                                  15,16,17,17,18,19,20,21,21,22,23,24,25,25,26,27,
@@ -75,9 +75,7 @@ int getImageFeature(void)
   int thresholdBlack=99;
   bool flagL,flagR;
   int firstMiddle;
- 
-  int deltWidth[5]={1000,1000,1000,1000,1000};
-  
+ int deltWidth[5]={1000,1000,1000,1000,1000};
   temp=lastMiddlePoint;//this is the middle of cols
   firstMiddle=lastMiddlePoint;
 
@@ -152,7 +150,7 @@ int getImageFeature(void)
     {
        if(imgadd[i+j]<thresholdBlack)//black
        {
-         if(lastBlock==whiteBlock)
+         if(lastBlock==whiteBlock&&imgadd[i+j+1]<thresholdBlack)
          {
            blackCount++;
            lastBlock=blackBlock;
@@ -160,16 +158,14 @@ int getImageFeature(void)
        }
        else//white
        {
-         if(lastBlock==blackBlock)
+         if(lastBlock==blackBlock&&imgadd[i+j+1]>=thresholdBlack)
          {
            whiteCount++;
            lastBlock=whiteBlock;
          }
        }
-       if(whiteCount>=9&&blackCount>=9)
+       if(whiteCount>=8&&blackCount>=8)
         doWeRun=false;
-       else
-         doWeRun=true;
     }
   }
   else
@@ -177,27 +173,28 @@ int getImageFeature(void)
     doWeRun=true;//这里有可能要注释掉  看最后的刹车速度
   }
   
+  
   return firstMiddle;
 }
 
 
 void dispimage(void){
-	uint16_t i=0, j=0;
+    uint16_t i=0, j=0;
         middleX=0;
         char showInfo[4];
         float output;
      
         
-	//使用OLED画出摄像头的图像
-	for(i = 0; i<row_num; i++){
+    //使用OLED画出摄像头的图像
+    for(i = 0; i<row_num; i++){
 
-		for(j = 0; j<col_num ;j++){
+        for(j = 0; j<col_num ;j++){
                   if(imgadd[i*col_num + j] > whiteRoad)
-				OLED_DrawPoint(display_col[j],i+14,0);
-			else
-				OLED_DrawPoint(display_col[j],i+14,1);						
-		}
-	}
+                OLED_DrawPoint(display_col[j],i+14,0);
+            else
+                OLED_DrawPoint(display_col[j],i+14,1);                      
+        }
+    }
         
         
         i= scanRowBegin;
@@ -212,29 +209,29 @@ void dispimage(void){
         middleX=getImageFeature();
         j=display_col[middleX];
         for(i=0;i<row_num;i++)
-          OLED_DrawPoint(j,i+14,1);	
+          OLED_DrawPoint(j,i+14,1); 
         
         
         
         InFifo(&fifoData,middleX);
         
         middleX=middleX-col_num/2;
+        //940 760 852 
         
-        
-        #define MAX_PULSE               940
-        #define MIN_PULSE               760
+        #define MAX_PULSE               960
+        #define MIN_PULSE               740
         #define MIDDLE_PULSE            852
         
-        if(abs(deltBias)<8)angle_kp=angle_kp_low;
-        else if(abs(deltBias)<13) angle_kp=angle_kp_high;
-        else angle_kp=angle_kp_high;
-        
+        if(abs(deltBias)<seg1)angle_kp=1;//10; 1
+        else if(abs(deltBias)<seg2)angle_kp=2.8;//20; 2.8
+        else if(abs(deltBias)<seg3) angle_kp=4.8;//30; 4.8
+        else angle_kp=6.8;//6.8
         angle_error=middleX;
-        output=MIDDLE_PULSE+angle_kp*angle_error+angle_kd*(angle_error-angle_lasterror);
-
+        outputAngleValue=angle_kp*angle_error+angle_kd*(angle_error-angle_lasterror);
+        output=MIDDLE_PULSE+outputAngleValue;
         if(output<MIN_PULSE)output=MIN_PULSE;
         if(output>MAX_PULSE)output=MAX_PULSE;
-        
+        angle_lasterror=angle_error;
         
         FTM_QD_GetData(HW_FTM1, &QDvalue, &QDdirection);
         QDvalue=-QDvalue;
@@ -246,7 +243,7 @@ void dispimage(void){
        // printf("%d %d %d\n",QDvalue,lastCounterValue,(int)speedValue);
         
         FTM_PWM_ChangeDuty(HW_FTM2, HW_FTM_CH0,(int)output);//设置舵机pwm输出
-	OLED_Refresh_Gram();
+    OLED_Refresh_Gram();
 }
 
 
